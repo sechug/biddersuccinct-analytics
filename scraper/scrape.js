@@ -1,68 +1,264 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
-const path = require('path');
 
-async function scrapeInterval() {
-  const logFile = path.join(__dirname, '../data/raw/bidders-log.csv');
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
-
-  if (!fs.existsSync(logFile)) {
-    fs.mkdirSync(path.dirname(logFile), { recursive: true });
-    fs.writeFileSync(logFile, 'timestamp,bidderCount\n');
+class Phase2Detector {
+  constructor() {
+    this.browser = null;
+    this.page = null;
+    this.isRunning = false;
+    this.logFile = 'data/raw/bidders-log.csv';
+    this.lastPhaseState = 'phase1';
+    this.phase2StartTime = null;
+    this.currentSessionBidders = [];
   }
 
-  const collected = [];
+  async init() {
+    if (!fs.existsSync(this.logFile)) {
+      fs.mkdirSync('data/raw', { recursive: true });
+      fs.writeFileSync(this.logFile, 'timestamp,bidderCount\n');
+    }
 
-  console.log('⏱️ Starting 15-minute collection loop...');
-  for (let i = 0; i < 15; i++) {
+    this.browser = await chromium.launch({
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+      ]
+    });
+
+    this.page = await this.browser.newPage();
+    this.page.setDefaultTimeout(8000);
+    this.page.setDefaultNavigationTimeout(15000);
+
+    await this.page.goto('https://testnet.succinct.xyz/prove/dashboard', {
+      waitUntil: 'domcontentloaded',
+      timeout: 15000
+    });
+
+    console.log('✅ Browser ready - monitoring for Phase 2...');
+  }
+
+  async checkPhase() {
     try {
-      await page.goto('https://testnet.succinct.xyz/prove/dashboard', {
-        waitUntil: 'domcontentloaded',
-        timeout: 15000
-      });
-
-      const data = await page.evaluate(() => {
+      const phaseData = await this.page.evaluate(() => {
         const elements = document.querySelectorAll('p.font-monomaniac.mb-1.text-sm.uppercase.text-prove-gray');
         const foundTexts = Array.from(elements).map(el => el.textContent.trim());
+
         const hasMultiplier = foundTexts.includes('Multiplier');
         const hasPrize = foundTexts.includes('Prize');
         const isPhase2 = hasMultiplier && hasPrize;
 
         let bidderCount = 0;
-        const bidderEl = document.querySelector('p.font-monomaniac.-mt-1.text-lg.uppercase.text-white');
-        if (bidderEl) {
-          const match = bidderEl.textContent.match(/\d+/);
-          bidderCount = match ? parseInt(match[0], 10) : 0;
-        }
+        try {
+          const bidderEl = document.querySelector('p.font-monomaniac.-mt-1.text-lg.uppercase.text-white');
+          if (bidderEl) {
+            const match = bidderEl.textContent.match(/\d+/);
+            bidderCount = match ? parseInt(match[0], 10) : 0;
+          }
+        } catch (e) {}
 
-        return { isPhase2, bidderCount };
+        return {
+          foundTexts,
+          hasMultiplier,
+          hasPrize,
+          isPhase2,
+          bidderCount,
+          timestamp: Date.now()
+        };
       });
 
-      if (data.isPhase2) {
-        collected.push(data.bidderCount);
-        console.log(`✅ Minute ${i + 1}: ${data.bidderCount} bidders (Phase 2)`);
-      } else {
-        console.log(`⏳ Minute ${i + 1}: Not Phase 2`);
-      }
-    } catch (err) {
-      console.error(`⚠️ Minute ${i + 1} failed:`, err.message);
+      return phaseData;
+    } catch (error) {
+      console.error(`❌ Phase check error: ${error.message}`);
+      return null;
     }
-
-    if (i < 14) await new Promise(res => setTimeout(res, 60 * 1000)); // wait 1 min
   }
 
-  await browser.close();
+  logBidderData(bidderCount) {
+    const timestamp = new Date().toISOString().replace('T', 'T').replace(/\.\d{3}Z$/, 'Z');
+    const logLine = `${timestamp},${bidderCount}\n`;
+    fs.appendFileSync(this.logFile, logLine);
+    console.log(`📝 Logged: ${timestamp} - ${bidderCount} bidders`);
+  }
 
-  if (collected.length > 0) {
-    const avg = collected.reduce((a, b) => a + b, 0) / collected.length;
-    const timestamp = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
-    const line = `${timestamp},${avg.toFixed(1)}\n`;
-    fs.appendFileSync(logFile, line);
-    console.log(`📝 Logged 15-min average: ${avg.toFixed(1)} bidders`);
-  } else {
-    console.log('🚫 No Phase 2 detected in last 15 minutes. No log written.');
+  // NEW METHOD: Wait for Phase 2 and capture once
+  async waitForPhase2AndCapture() {
+    console.log('🎯 Waiting for Phase 2 to start...');
+    
+    let consecutiveErrors = 0;
+    let checkCount = 0;
+    
+    while (true) {
+      checkCount++;
+      const phaseData = await this.checkPhase();
+      
+      if (!phaseData) {
+        consecutiveErrors++;
+        if (consecutiveErrors >= 3) {
+          console.log('🔄 Too many errors, refreshing page...');
+          try {
+            await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+            consecutiveErrors = 0;
+          } catch (e) {
+            console.error('❌ Reload failed:', e.message);
+          }
+        }
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        continue;
+      }
+      
+      consecutiveErrors = 0;
+      
+      if (phaseData.isPhase2) {
+        // Phase 2 detected - capture data and exit
+        console.log('🚨 PHASE 2 DETECTED!');
+        this.logBidderData(phaseData.bidderCount);
+        console.log(`✅ Data captured: ${phaseData.bidderCount} bidders`);
+        break; // EXIT - mission accomplished!
+      }
+      
+      // Still Phase 1 - keep waiting
+      const waitText = phaseData.foundTexts.length > 0 ? `[${phaseData.foundTexts.join(', ')}]` : '[no elements]';
+      process.stdout.write(`⏳ Waiting for Phase 2... (check #${checkCount}) - Found: ${waitText}\r`);
+      await new Promise(resolve => setTimeout(resolve, 15000));
+    }
+  }
+
+  // ORIGINAL METHOD: Continuous monitoring (for local use)
+  async startMonitoring() {
+    this.isRunning = true;
+    console.log('🎯 Starting Phase 2 monitoring...');
+
+    let consecutiveErrors = 0;
+    let checkCount = 0;
+
+    while (this.isRunning) {
+      checkCount++;
+      const phaseData = await this.checkPhase();
+
+      if (!phaseData) {
+        consecutiveErrors++;
+        if (consecutiveErrors >= 3) {
+          console.log('🔄 Too many errors, refreshing page...');
+          try {
+            await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+            consecutiveErrors = 0;
+          } catch (e) {
+            console.error('❌ Reload failed:', e.message);
+          }
+        }
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        continue;
+      }
+
+      consecutiveErrors = 0;
+      const currentPhase = phaseData.isPhase2 ? 'phase2' : 'phase1';
+
+      if (currentPhase !== this.lastPhaseState) {
+        if (currentPhase === 'phase2') {
+          this.phase2StartTime = Date.now();
+          this.currentSessionBidders = [];
+          console.log('🚨 PHASE 2 STARTED!');
+          this.logBidderData(phaseData.bidderCount);
+        } else {
+          const duration = this.phase2StartTime ? Math.round((Date.now() - this.phase2StartTime) / 1000) : 0;
+          console.log(`⏹️  PHASE 2 ENDED (${duration}s)`);
+          this.phase2StartTime = null;
+          this.currentSessionBidders = [];
+        }
+        this.lastPhaseState = currentPhase;
+      }
+
+      if (currentPhase === 'phase2') {
+        this.currentSessionBidders.push(phaseData.bidderCount);
+        process.stdout.write(`🎯 Phase 2 Active - ${phaseData.bidderCount} bidders (duration: ${Math.round((Date.now() - this.phase2StartTime) / 1000)}s)\r`);
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      } else {
+        const waitText = phaseData.foundTexts.length > 0 ? `[${phaseData.foundTexts.join(', ')}]` : '[no elements]';
+        process.stdout.write(`⏳ Waiting for Phase 2... (check #${checkCount}) - Found: ${waitText}\r`);
+        await new Promise(resolve => setTimeout(resolve, 15000));
+      }
+    }
+  }
+
+  async stop() {
+    console.log('\n🛑 Stopping monitoring...');
+    this.isRunning = false;
+
+    if (this.phase2StartTime) {
+      const duration = Math.round((Date.now() - this.phase2StartTime) / 1000);
+      console.log(`📊 Final Phase 2 duration: ${duration}s`);
+      console.log(`📊 Total data points: ${this.currentSessionBidders.length}`);
+    }
+
+    try {
+      const stats = fs.statSync(this.logFile);
+      const lines = fs.readFileSync(this.logFile, 'utf8').split('\n').length - 1;
+      console.log(`📄 Final log: ${this.logFile} (${lines} entries, ${Math.round(stats.size / 1024)}KB)`);
+    } catch (e) {
+      console.log(`📄 Log file: ${this.logFile}`);
+    }
+
+    if (this.browser) await this.browser.close();
+    console.log('✅ Stopped');
+  }
+
+  getLogStats() {
+    try {
+      if (!fs.existsSync(this.logFile)) return { entries: 0, size: 0 };
+
+      const content = fs.readFileSync(this.logFile, 'utf8');
+      const lines = content.split('\n').filter(line => line.trim()).length - 1;
+      const stats = fs.statSync(this.logFile);
+
+      return {
+        entries: lines,
+        sizeKB: Math.round(stats.size / 1024),
+        lastEntry: content.split('\n').slice(-2)[0]
+      };
+    } catch (e) {
+      return { entries: 0, size: 0, error: e.message };
+    }
   }
 }
 
-scrapeInterval();
+// Modified main function with mode support
+async function main() {
+  const detector = new Phase2Detector();
+  const mode = process.argv[2] || 'monitor'; // default to monitor mode
+
+  process.on('SIGINT', async () => {
+    await detector.stop();
+    process.exit(0);
+  });
+
+  process.on('SIGTERM', async () => {
+    await detector.stop();
+    process.exit(0);
+  });
+
+  try {
+    await detector.init();
+    const stats = detector.getLogStats();
+    console.log(`📄 Log file status: ${stats.entries} entries`);
+    
+    if (mode === 'single') {
+      // GitHub Actions mode - wait for Phase 2 and capture once
+      await detector.waitForPhase2AndCapture();
+      await detector.stop();
+    } else {
+      // Local monitoring mode - continuous monitoring
+      await detector.startMonitoring();
+    }
+  } catch (error) {
+    console.error('❌ Fatal error:', error);
+    await detector.stop();
+    process.exit(1);
+  }
+}
+
+if (require.main === module) {
+  main();
+}
+
+module.exports = Phase2Detector;
