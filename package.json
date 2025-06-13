@@ -7,7 +7,6 @@
     "scrape": "node scraper/scrape.js",
     "latest": "node scraper/save-latest.js",
     "dev": "npx serve website"
-    "prepare": "npx playwright install"
   },
   "dependencies": {
     "playwright": "^1.53.0"
