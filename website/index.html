@@ -723,25 +723,14 @@ async function fetchData() {
         });
 
         function refreshData() {
-            // Simulate adding new data point
-            const lastTimestamp = new Date(rawData[rawData.length - 1].timestamp);
-            const newTimestamp = new Date(lastTimestamp.getTime() + 60000); // +1 minute
-            const newBidders = Math.floor(Math.random() * 8) + 6; // Random between 6-13
-            
-            rawData.push({
-                timestamp: newTimestamp.toISOString(),
-                bidders: newBidders
-            });
-            
-            updateCharts();
-            document.getElementById('lastUpdate').textContent = 'Just now';
-            document.getElementById('dataPoints').textContent = rawData.length;
-            
-            // Add some sparkle effect
-            const btn = document.querySelector('.refresh-btn');
-            btn.style.transform = 'scale(0.95)';
-            setTimeout(() => btn.style.transform = 'scale(1)', 150);
-        }
+    fetchData(); // Fetch latest.json & updateCharts
+
+    document.getElementById('lastUpdate').textContent = 'Just now';
+
+    const btn = document.querySelector('.refresh-btn');
+    btn.style.transform = 'scale(0.95)';
+    setTimeout(() => btn.style.transform = 'scale(1)', 150);
+}
 
         // Auto refresh every 60 seconds (simulate real-time)
         setInterval(() => {
