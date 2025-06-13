@@ -18,15 +18,10 @@ class Phase2Detector {
     }
 
     this.browser = await chromium.launch({
-      executablePath: '/nix/store/x205pbkd5xh5g4iv0g58xjla55has3cx-chromium-108.0.5359.94/bin/chromium',
       headless: true,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--memory-pressure-off',
-        '--max_old_space_size=256'
       ]
     });
 
