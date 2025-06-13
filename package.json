@@ -4,7 +4,7 @@
   "description": "Real-time bidder analytics and trend analysis for Succinct testnet",
   "main": "scraper/scrape.js",
   "scripts": {
-    "scrape": "node scraper/scrape.js",
+    "scrape": "node scraper/scrape.js single",
     "latest": "node scraper/save-latest.js",
     "dev": "npx serve website"
   },
