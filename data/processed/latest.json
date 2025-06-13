@@ -1,4 +1,22 @@
-{
-  "timestamp": "2025-06-13T17:42:55Z",
-  "bidders": 11
-}
+[
+  {
+    "timestamp": "2025-06-13T07:48:52Z",
+    "bidders": 8
+  },
+  {
+    "timestamp": "2025-06-13T07:49:37Z",
+    "bidders": 10
+  },
+  {
+    "timestamp": "2025-06-13T07:50:47Z",
+    "bidders": 10
+  },
+  {
+    "timestamp": "2025-06-13T07:51:47Z",
+    "bidders": 12
+  },
+  {
+    "timestamp": "2025-06-13T18:09:36Z",
+    "bidders": 10
+  }
+]
