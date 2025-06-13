@@ -476,28 +476,19 @@
 
     <script>
         // Sample data berdasarkan CSV kamu
-        const rawData = [
-            { timestamp: '2025-06-13T02:19:00Z', bidders: 7 },
-            { timestamp: '2025-06-13T02:20:00Z', bidders: 9 },
-            { timestamp: '2025-06-13T02:20:56Z', bidders: 7 },
-            { timestamp: '2025-06-13T02:21:56Z', bidders: 8 },
-            { timestamp: '2025-06-13T02:22:46Z', bidders: 11 },
-            { timestamp: '2025-06-13T02:23:56Z', bidders: 8 },
-            { timestamp: '2025-06-13T02:24:46Z', bidders: 11 },
-            { timestamp: '2025-06-13T02:25:41Z', bidders: 11 },
-            { timestamp: '2025-06-13T02:26:51Z', bidders: 8 },
-            { timestamp: '2025-06-13T02:27:51Z', bidders: 6 },
-            { timestamp: '2025-06-13T02:28:41Z', bidders: 8 },
-            { timestamp: '2025-06-13T02:29:51Z', bidders: 12 },
-            { timestamp: '2025-06-13T02:30:36Z', bidders: 13 },
-            { timestamp: '2025-06-13T02:31:46Z', bidders: 11 },
-            { timestamp: '2025-06-13T02:32:51Z', bidders: 10 },
-            { timestamp: '2025-06-13T02:33:46Z', bidders: 11 },
-            { timestamp: '2025-06-13T02:34:41Z', bidders: 10 },
-            { timestamp: '2025-06-13T02:35:46Z', bidders: 6 },
-            { timestamp: '2025-06-13T02:36:41Z', bidders: 8 },
-            { timestamp: '2025-06-13T02:37:41Z', bidders: 8 }
-        ];
+        let rawData = [];
+
+async function fetchData() {
+    try {
+        const response = await fetch('/data/processed/latest.json');
+        rawData = await response.json();
+        updateCharts();
+        document.getElementById('dataPoints').textContent = rawData.length;
+    } catch (e) {
+        console.error("Failed to load data:", e);
+    }
+}
+
 
         let histogramChart, trendChart;
         let currentInterval = 15; // default 15 minutes
@@ -768,9 +759,9 @@
 
         // Initialize everything
         document.addEventListener('DOMContentLoaded', function() {
-            initCharts();
-            document.getElementById('dataPoints').textContent = rawData.length;
-        });
+    initCharts();
+    fetchData();
+});
     </script>
 </body>
 </html>
