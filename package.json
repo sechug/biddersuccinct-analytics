@@ -1,0 +1,17 @@
+{
+  "name": "biddersuccinct-analytics",
+  "version": "1.0.0",
+  "description": "Real-time bidder analytics and trend analysis for Succinct testnet",
+  "main": "scraper/scrape.js",
+  "scripts": {
+    "scrape": "node scraper/scrape.js",
+    "latest": "node scraper/save-latest.js",
+    "dev": "npx serve website"
+  },
+  "dependencies": {
+    "playwright": "^1.53.0"
+  },
+  "devDependencies": {
+    "serve": "^14.2.4"
+  }
+}
