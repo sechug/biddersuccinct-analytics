@@ -2,7 +2,7 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 
 async function scrapeOnce() {
-  const logFile = 'bidders-log.csv';
+  const logFile = 'data/raw/bidders-log.csv';
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
 
