@@ -2,8 +2,8 @@ const fs = require('fs');
 const path = require('path');
 
 function saveLatestToJSON() {
-  const csvPath = path.join(__dirname, '../data/bidders-log.csv');
-  const jsonPath = path.join(__dirname, '../data/latest.json');
+  const csvPath = path.join(__dirname, '../data/raw/bidders-log.csv');
+  const jsonPath = path.join(__dirname, '../data/processed/latest.json');
 
   if (!fs.existsSync(csvPath)) {
     console.error('❌ CSV log file not found:', csvPath);
