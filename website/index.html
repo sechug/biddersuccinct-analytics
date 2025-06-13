@@ -480,7 +480,7 @@
 
 async function fetchData() {
     try {
-        const response = await fetch('/data/processed/latest.json');
+        const response = await fetch('https://raw.githubusercontent.com/sechug/biddersuccinct-analytics/main/data/processed/latest.json');
         rawData = await response.json();
         updateCharts();
         document.getElementById('dataPoints').textContent = rawData.length;
