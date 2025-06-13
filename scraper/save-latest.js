@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-function saveLatestToJSON() {
+function saveAllCSVtoJSON() {
   const csvPath = path.join(__dirname, '../data/raw/bidders-log.csv');
   const jsonPath = path.join(__dirname, '../data/processed/latest.json');
 
@@ -11,17 +11,22 @@ function saveLatestToJSON() {
   }
 
   const lines = fs.readFileSync(csvPath, 'utf8').trim().split('\n');
-  const lastLine = lines[lines.length - 1];
 
-  const [timestamp, bidderCount] = lastLine.split(',');
+  // Skip header
+  const dataLines = lines.slice(1);
 
-  const latestData = {
-    timestamp,
-    bidders: parseInt(bidderCount, 10)
-  };
+  const result = dataLines
+    .map(line => {
+      const [timestamp, bidderCount] = line.split(',');
+      return {
+        timestamp,
+        bidders: parseInt(bidderCount, 10)
+      };
+    })
+    .filter(entry => !isNaN(entry.bidders)); // remove any broken entries
 
-  fs.writeFileSync(jsonPath, JSON.stringify(latestData, null, 2));
-  console.log(`✅ Saved latest.json: ${JSON.stringify(latestData)}`);
+  fs.writeFileSync(jsonPath, JSON.stringify(result, null, 2));
+  console.log(`✅ Saved ${result.length} entries to latest.json`);
 }
 
-saveLatestToJSON();
+saveAllCSVtoJSON();
