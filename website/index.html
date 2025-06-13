@@ -355,6 +355,26 @@
             }
         }
         
+        .loading-indicator {
+            display: none;
+            text-align: center;
+            color: #00ff7f;
+            font-size: 0.9rem;
+            margin: 10px 0;
+        }
+        
+        .error-message {
+            display: none;
+            text-align: center;
+            color: #ff4444;
+            font-size: 0.9rem;
+            margin: 10px 0;
+            padding: 10px;
+            background: rgba(255, 68, 68, 0.1);
+            border-radius: 5px;
+            border: 1px solid rgba(255, 68, 68, 0.3);
+        }
+        
         @media (max-width: 768px) {
             .dashboard {
                 grid-template-columns: 1fr;
@@ -403,13 +423,15 @@
                 <h2>
                     📊 Bidder Count Histogram
                     <div class="time-selector">
-                        <button class="time-btn" data-interval="1">1min</button>
-                        <button class="time-btn" data-interval="5">5min</button>
                         <button class="time-btn active" data-interval="15">15min</button>
                         <button class="time-btn" data-interval="30">30min</button>
                         <button class="time-btn" data-interval="60">1hr</button>
+                        <button class="time-btn" data-interval="240">4hr</button>
+                        <button class="time-btn" data-interval="720">12hr</button>
                     </div>
                 </h2>
+                <div class="loading-indicator" id="loadingIndicator">🔄 Loading data...</div>
+                <div class="error-message" id="errorMessage">❌ Failed to load data. Please try refreshing.</div>
                 <div class="chart-container">
                     <canvas id="histogramChart"></canvas>
                 </div>
@@ -425,19 +447,19 @@
                 
                 <div class="metrics">
                     <div class="metric">
-                        <div class="metric-value">9.2</div>
+                        <div class="metric-value" id="avgBidders">-</div>
                         <div class="metric-label">Avg Bidders</div>
                     </div>
                     <div class="metric">
-                        <div class="metric-value">13</div>
+                        <div class="metric-value" id="peakBidders">-</div>
                         <div class="metric-label">Peak Today</div>
                     </div>
                     <div class="metric">
-                        <div class="metric-value">6</div>
+                        <div class="metric-value" id="lowBidders">-</div>
                         <div class="metric-label">Low Today</div>
                     </div>
                     <div class="metric">
-                        <div class="metric-value">2.1</div>
+                        <div class="metric-value" id="volatility">-</div>
                         <div class="metric-label">Volatility</div>
                     </div>
                 </div>
@@ -448,11 +470,8 @@
                 
                 <div class="insights">
                     <h3>💎 Smart Insights</h3>
-                    <ul>
-                        <li>Activity increased 23% in last hour</li>
-                        <li>Peak hours typically 14:00-16:00</li>
-                        <li>Current trend: Moderate increase</li>
-                        <li>Predicted next 30min: Stable</li>
+                    <ul id="insightsList">
+                        <li>Loading insights...</li>
                     </ul>
                 </div>
             </div>
@@ -464,8 +483,8 @@
                     <div class="live-dot"></div>
                     <span>🔥 LIVE DATA</span>
                 </div>
-                <div>Last update: <span id="lastUpdate">Just now</span></div>
-                <div>Data points: <span id="dataPoints">20</span></div>
+                <div>Last update: <span id="lastUpdate">Loading...</span></div>
+                <div>Data points: <span id="dataPoints">-</span></div>
             </div>
             
             <button class="refresh-btn" onclick="refreshData()">
@@ -475,23 +494,48 @@
     </div>
 
     <script>
-        // Sample data berdasarkan CSV kamu
         let rawData = [];
-
-async function fetchData() {
-    try {
-        const response = await fetch('https://raw.githubusercontent.com/sechug/biddersuccinct-analytics/main/data/processed/latest.json');
-        rawData = await response.json();
-        updateCharts();
-        document.getElementById('dataPoints').textContent = rawData.length;
-    } catch (e) {
-        console.error("Failed to load data:", e);
-    }
-}
-
-
         let histogramChart, trendChart;
         let currentInterval = 15; // default 15 minutes
+
+        async function fetchData() {
+            const loadingEl = document.getElementById('loadingIndicator');
+            const errorEl = document.getElementById('errorMessage');
+            
+            try {
+                loadingEl.style.display = 'block';
+                errorEl.style.display = 'none';
+                
+                const response = await fetch('https://raw.githubusercontent.com/sechug/biddersuccinct-analytics/main/data/processed/latest.json');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                rawData = await response.json();
+                
+                if (!Array.isArray(rawData)) {
+                    throw new Error('Invalid data format received');
+                }
+                
+                updateCharts();
+                updateDataInfo();
+                loadingEl.style.display = 'none';
+                
+                console.log(`Loaded ${rawData.length} data points`);
+                
+            } catch (error) {
+                console.error("Failed to load data:", error);
+                loadingEl.style.display = 'none';
+                errorEl.style.display = 'block';
+                errorEl.textContent = `❌ Failed to load data: ${error.message}`;
+            }
+        }
+
+        function updateDataInfo() {
+            document.getElementById('dataPoints').textContent = rawData.length;
+            document.getElementById('lastUpdate').textContent = 'Just now';
+        }
 
         function initCharts() {
             // Histogram Chart with neon green theme
@@ -592,18 +636,16 @@ async function fetchData() {
                     }
                 }
             });
-
-            updateCharts();
         }
 
         function aggregateData(intervalMinutes) {
+            if (!rawData || rawData.length === 0) return [];
+            
             const aggregated = [];
             const intervalMs = intervalMinutes * 60 * 1000;
             
             // Sort data by timestamp
             const sortedData = rawData.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-            
-            if (sortedData.length === 0) return aggregated;
             
             const startTime = new Date(sortedData[0].timestamp);
             const endTime = new Date(sortedData[sortedData.length - 1].timestamp);
@@ -635,6 +677,8 @@ async function fetchData() {
         }
 
         function updateCharts() {
+            if (!rawData || rawData.length === 0) return;
+            
             const aggregatedData = aggregateData(currentInterval);
             
             // Update histogram
@@ -662,6 +706,7 @@ async function fetchData() {
             trendChart.update('none');
             
             updateMetrics(values);
+            updateInsights(values);
         }
 
         function updateMetrics(values) {
@@ -673,11 +718,10 @@ async function fetchData() {
             const volatility = calculateVolatility(values);
             
             // Update display
-            const metricValues = document.querySelectorAll('.metric-value');
-            metricValues[0].textContent = avg.toFixed(1);
-            metricValues[1].textContent = max;
-            metricValues[2].textContent = min;
-            metricValues[3].textContent = volatility.toFixed(1);
+            document.getElementById('avgBidders').textContent = avg.toFixed(1);
+            document.getElementById('peakBidders').textContent = max;
+            document.getElementById('lowBidders').textContent = min;
+            document.getElementById('volatility').textContent = volatility.toFixed(1);
             
             // Update status
             updateStatus(avg, min, max);
@@ -712,6 +756,69 @@ async function fetchData() {
             }
         }
 
+        function updateInsights(values) {
+            if (values.length < 2) return;
+            
+            const insights = [];
+            
+            // Calculate trend
+            const recent = values.slice(-3);
+            const earlier = values.slice(-6, -3);
+            
+            if (recent.length > 0 && earlier.length > 0) {
+                const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
+                const earlierAvg = earlier.reduce((a, b) => a + b, 0) / earlier.length;
+                const change = ((recentAvg - earlierAvg) / earlierAvg * 100);
+                
+                if (Math.abs(change) > 5) {
+                    insights.push(`Activity ${change > 0 ? 'increased' : 'decreased'} ${Math.abs(change).toFixed(1)}% recently`);
+                } else {
+                    insights.push(`Activity remains stable (${change > 0 ? '+' : ''}${change.toFixed(1)}%)`);
+                }
+            }
+            
+            // Peak time analysis
+            const now = new Date();
+            const currentHour = now.getHours();
+            
+            if (currentHour >= 14 && currentHour <= 16) {
+                insights.push('Currently in peak hours (14:00-16:00)');
+            } else if (currentHour >= 10 && currentHour <= 18) {
+                insights.push('Active hours - moderate activity expected');
+            } else {
+                insights.push('Off-peak hours - lower activity expected');
+            }
+            
+            // Volatility insight
+            const volatility = calculateVolatility(values);
+            if (volatility > 2) {
+                insights.push('High volatility detected - unpredictable patterns');
+            } else if (volatility < 1) {
+                insights.push('Low volatility - stable patterns');
+            } else {
+                insights.push('Moderate volatility - normal fluctuations');
+            }
+            
+            // Prediction
+            const trend = values.slice(-3);
+            if (trend.length >= 3) {
+                const isIncreasing = trend[2] > trend[1] && trend[1] > trend[0];
+                const isDecreasing = trend[2] < trend[1] && trend[1] < trend[0];
+                
+                if (isIncreasing) {
+                    insights.push('Predicted trend: Continued increase');
+                } else if (isDecreasing) {
+                    insights.push('Predicted trend: Continued decrease');
+                } else {
+                    insights.push('Predicted trend: Stable activity');
+                }
+            }
+            
+            // Update insights list
+            const insightsList = document.getElementById('insightsList');
+            insightsList.innerHTML = insights.map(insight => `<li>${insight}</li>`).join('');
+        }
+
         // Event listeners for time selector
         document.querySelectorAll('.time-btn').forEach(btn => {
             btn.addEventListener('click', function() {
@@ -723,34 +830,42 @@ async function fetchData() {
         });
 
         function refreshData() {
-    fetchData(); // Fetch latest.json & updateCharts
+            fetchData();
+            
+            const btn = document.querySelector('.refresh-btn');
+            btn.style.transform = 'scale(0.95)';
+            setTimeout(() => btn.style.transform = 'scale(1)', 150);
+        }
 
-    document.getElementById('lastUpdate').textContent = 'Just now';
-
-    const btn = document.querySelector('.refresh-btn');
-    btn.style.transform = 'scale(0.95)';
-    setTimeout(() => btn.style.transform = 'scale(1)', 150);
-}
-
-        // Auto refresh every 60 seconds (simulate real-time)
+        // Auto refresh every 2 minutes
         setInterval(() => {
             refreshData();
-        }, 60000);
+        }, 120000);
 
         // Update last update time
         setInterval(() => {
-            const now = new Date();
-            const lastUpdate = document.getElementById('lastUpdate');
-            if (lastUpdate.textContent !== 'Just now') {
-                lastUpdate.textContent = '1 min ago';
+            const lastUpdateEl = document.getElementById('lastUpdate');
+            const currentText = lastUpdateEl.textContent;
+            
+            if (currentText === 'Just now') {
+                lastUpdateEl.textContent = '1 min ago';
+            } else if (currentText === '1 min ago') {
+                lastUpdateEl.textContent = '2 min ago';
+            } else if (currentText.includes('min ago')) {
+                const minutes = parseInt(currentText.match(/\d+/)[0]) + 1;
+                if (minutes < 60) {
+                    lastUpdateEl.textContent = `${minutes} min ago`;
+                } else {
+                    lastUpdateEl.textContent = '1 hr ago';
+                }
             }
         }, 60000);
 
         // Initialize everything
         document.addEventListener('DOMContentLoaded', function() {
-    initCharts();
-    fetchData();
-});
+            initCharts();
+            fetchData();
+        });
     </script>
 </body>
 </html>
