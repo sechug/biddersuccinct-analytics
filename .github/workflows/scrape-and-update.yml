@@ -2,8 +2,8 @@ name: 🔁 Scrape & Update Dashboard
 
 on:
   schedule:
-    - cron: '*/15 * * * *'  # setiap 15 menit
-  workflow_dispatch:        # bisa juga dijalankan manual
+    - cron: "*/15 * * * *"  # Setiap 15 menit
+  workflow_dispatch:
 
 jobs:
   scrape-and-update:
@@ -16,10 +16,13 @@ jobs:
       - name: ⚙️ Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: 18
+          node-version: '18'
 
       - name: 📦 Install Dependencies
         run: npm install
+
+      - name: 🔧 Install Playwright Browsers
+        run: npx playwright install --with-deps
 
       - name: 🕷️ Run Scraper
         run: npm run scrape
@@ -27,10 +30,10 @@ jobs:
       - name: 💾 Save latest.json
         run: npm run latest
 
-      - name: 📤 Commit & Push Changes
+      - name: 📤 Commit & Push latest.json
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/
-          git commit -m "🤖 Update data via GitHub Actions at $(date -u +"%Y-%m-%dT%H:%M:%SZ")" || echo "No changes to commit"
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add data/processed/latest.json
+          git commit -m "📈 Update latest.json from GitHub Actions" || echo "No changes to commit"
           git push
