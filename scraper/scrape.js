@@ -74,15 +74,82 @@ class Phase2Detector {
     }
   }
 
-  logBidderData(bidderCount) {
-    const timestamp = new Date().toISOString().replace('T', 'T').replace(/\.\d{3}Z$/, 'Z');
+  logBidderData(bidderCount, customTimestamp = null) {
+    const timestamp = customTimestamp ? 
+      new Date(customTimestamp).toISOString().replace('T', 'T').replace(/\.\d{3}Z$/, 'Z') :
+      new Date().toISOString().replace('T', 'T').replace(/\.\d{3}Z$/, 'Z');
+    
     const logLine = `${timestamp},${bidderCount}\n`;
     fs.appendFileSync(this.logFile, logLine);
-    console.log(`📝 Logged: ${timestamp} - ${bidderCount} bidders`);
+    
+    const logType = customTimestamp ? '🔄 Backfilled' : '📝 Logged';
+    console.log(`${logType}: ${timestamp} - ${bidderCount} bidders`);
   }
 
-  // NEW METHOD: Wait for Phase 2 and capture once
+  // NEW: Gap detection and backfill
+  async checkAndBackfillGaps() {
+    try {
+      if (!fs.existsSync(this.logFile)) {
+        console.log('📄 No existing log file, starting fresh');
+        return;
+      }
+
+      const content = fs.readFileSync(this.logFile, 'utf8');
+      const lines = content.trim().split('\n');
+      
+      if (lines.length <= 1) {
+        console.log('📄 No existing data, starting fresh');
+        return;
+      }
+
+      // Get last entry
+      const lastLine = lines[lines.length - 1];
+      const lastTimestamp = new Date(lastLine.split(',')[0]);
+      
+      const now = new Date();
+      const intervalMs = 15 * 60 * 1000; // 15 minutes
+      const timeDiff = now - lastTimestamp;
+      const expectedIntervals = Math.floor(timeDiff / intervalMs);
+
+      if (expectedIntervals > 1) {
+        const missingIntervals = expectedIntervals - 1;
+        const maxBackfill = Math.min(missingIntervals, 3); // Max 3 backfill
+        
+        console.log(`⚠️ Gap detected: ${missingIntervals} missing intervals`);
+        console.log(`🔄 Attempting to backfill ${maxBackfill} intervals...`);
+
+        // Backfill missing intervals
+        for (let i = maxBackfill; i > 0; i--) {
+          const backfillTime = new Date(now - (intervalMs * i));
+          console.log(`🔍 Backfilling data for: ${backfillTime.toISOString()}`);
+          
+          const phaseData = await this.checkPhase();
+          if (phaseData && phaseData.isPhase2) {
+            this.logBidderData(phaseData.bidderCount, backfillTime);
+          } else {
+            // Log 0 if not in Phase 2 during backfill
+            this.logBidderData(0, backfillTime);
+          }
+          
+          // Small delay between backfills
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+        
+        console.log(`✅ Backfill completed`);
+      } else {
+        console.log('✅ No gaps detected, data is current');
+      }
+    } catch (error) {
+      console.error('❌ Gap detection error:', error.message);
+      console.log('📝 Continuing with normal scraping...');
+    }
+  }
+
+  // MODIFIED: Wait for Phase 2 and capture once (with gap detection)
   async waitForPhase2AndCapture() {
+    console.log('🔍 Checking for data gaps...');
+    await this.checkAndBackfillGaps();
+    
     console.log('🎯 Waiting for Phase 2 to start...');
     
     let consecutiveErrors = 0;
@@ -243,7 +310,7 @@ async function main() {
     console.log(`📄 Log file status: ${stats.entries} entries`);
     
     if (mode === 'single') {
-      // GitHub Actions mode - wait for Phase 2 and capture once
+      // GitHub Actions mode - gap detection + wait for Phase 2 and capture once
       await detector.waitForPhase2AndCapture();
       await detector.stop();
     } else {
