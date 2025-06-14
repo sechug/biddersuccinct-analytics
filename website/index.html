@@ -498,6 +498,12 @@
         let histogramChart, trendChart;
         let currentInterval = 15; // default 15 minutes
 
+        // PASTE INI DI LINE ~500 (setelah let currentInterval = 15;)
+function filterRecentData(data, hoursLimit = 24) {
+    const cutoffTime = new Date(Date.now() - (hoursLimit * 60 * 60 * 1000));
+    return data.filter(point => new Date(point.timestamp) >= cutoffTime);
+}
+
         async function fetchData() {
             const loadingEl = document.getElementById('loadingIndicator');
             const errorEl = document.getElementById('errorMessage');
@@ -639,42 +645,47 @@
         }
 
         function aggregateData(intervalMinutes) {
-            if (!rawData || rawData.length === 0) return [];
-            
-            const aggregated = [];
-            const intervalMs = intervalMinutes * 60 * 1000;
-            
-            // Sort data by timestamp
-            const sortedData = rawData.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-            
-            const startTime = new Date(sortedData[0].timestamp);
-            const endTime = new Date(sortedData[sortedData.length - 1].timestamp);
-            
-            let currentTime = new Date(startTime);
-            
-            while (currentTime <= endTime) {
-                const nextTime = new Date(currentTime.getTime() + intervalMs);
-                
-                // Find data points in this interval
-                const pointsInInterval = sortedData.filter(point => {
-                    const pointTime = new Date(point.timestamp);
-                    return pointTime >= currentTime && pointTime < nextTime;
-                });
-                
-                if (pointsInInterval.length > 0) {
-                    const avgBidders = pointsInInterval.reduce((sum, point) => sum + point.bidders, 0) / pointsInInterval.length;
-                    aggregated.push({
-                        timestamp: currentTime.toISOString(),
-                        bidders: Math.round(avgBidders * 10) / 10,
-                        count: pointsInInterval.length
-                    });
-                }
-                
-                currentTime = nextTime;
-            }
-            
-            return aggregated;
+    if (!rawData || rawData.length === 0) return [];
+    
+    // TAMBAHAN: Filter data untuk 24 jam terakhir saja
+    const recentData = filterRecentData(rawData, 24);
+    
+    const aggregated = [];
+    const intervalMs = intervalMinutes * 60 * 1000;
+    
+    // Sort data by timestamp
+    const sortedData = recentData.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    
+    if (sortedData.length === 0) return [];
+    
+    const startTime = new Date(sortedData[0].timestamp);
+    const endTime = new Date(sortedData[sortedData.length - 1].timestamp);
+    
+    let currentTime = new Date(startTime);
+    
+    while (currentTime <= endTime) {
+        const nextTime = new Date(currentTime.getTime() + intervalMs);
+        
+        // Find data points in this interval
+        const pointsInInterval = sortedData.filter(point => {
+            const pointTime = new Date(point.timestamp);
+            return pointTime >= currentTime && pointTime < nextTime;
+        });
+        
+        if (pointsInInterval.length > 0) {
+            const avgBidders = pointsInInterval.reduce((sum, point) => sum + point.bidders, 0) / pointsInInterval.length;
+            aggregated.push({
+                timestamp: currentTime.toISOString(),
+                bidders: Math.round(avgBidders * 10) / 10,
+                count: pointsInInterval.length
+            });
         }
+        
+        currentTime = nextTime;
+    }
+    
+    return aggregated;
+}
 
         function updateCharts() {
             if (!rawData || rawData.length === 0) return;
