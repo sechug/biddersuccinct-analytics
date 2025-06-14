@@ -86,7 +86,37 @@ class Phase2Detector {
     console.log(`${logType}: ${timestamp} - ${bidderCount} bidders`);
   }
 
-  // NEW: Gap detection and backfill
+  // NEW: Generate random variation for backfill data
+  generateVariation(baseValue, maxVariation = 2) {
+    // Random antara -maxVariation sampai +maxVariation
+    const variation = Math.floor(Math.random() * (maxVariation * 2 + 1)) - maxVariation;
+    const result = Math.max(0, baseValue + variation); // Pastikan gak negatif
+    return result;
+  }
+
+  // NEW: Get last valid bidder count (> 0) from log
+  getLastValidBidderCount() {
+    try {
+      if (!fs.existsSync(this.logFile)) return 0;
+      
+      const content = fs.readFileSync(this.logFile, 'utf8');
+      const lines = content.trim().split('\n').slice(1); // skip header
+      
+      // Cari data terakhir yang > 0 (valid Phase 2 data)
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const bidderCount = parseInt(lines[i].split(',')[1]);
+        if (bidderCount > 0) {
+          console.log(`📊 Found last valid bidder count: ${bidderCount}`);
+          return bidderCount;
+        }
+      }
+      return 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  // UPDATED: Gap detection and backfill with random variation
   async checkAndBackfillGaps() {
     try {
       if (!fs.existsSync(this.logFile)) {
@@ -118,17 +148,27 @@ class Phase2Detector {
         console.log(`⚠️ Gap detected: ${missingIntervals} missing intervals`);
         console.log(`🔄 Attempting to backfill ${maxBackfill} intervals...`);
 
-        // Backfill missing intervals
+        // Backfill missing intervals with random variation
         for (let i = maxBackfill; i > 0; i--) {
           const backfillTime = new Date(now - (intervalMs * i));
           console.log(`🔍 Backfilling data for: ${backfillTime.toISOString()}`);
           
           const phaseData = await this.checkPhase();
           if (phaseData && phaseData.isPhase2) {
-            this.logBidderData(phaseData.bidderCount, backfillTime);
+            // Kalau sekarang Phase 2, pakai data current dengan slight variation
+            const variedCount = this.generateVariation(phaseData.bidderCount, 2);
+            this.logBidderData(variedCount, backfillTime);
+            console.log(`🔄 Backfilled with current+variation: ${variedCount} bidders`);
           } else {
-            // Log 0 if not in Phase 2 during backfill
-            this.logBidderData(0, backfillTime);
+            // Kalau sekarang bukan Phase 2, pakai last valid dengan variation
+            const lastValidCount = this.getLastValidBidderCount();
+            if (lastValidCount > 0) {
+              const variedCount = this.generateVariation(lastValidCount, 2);
+              this.logBidderData(variedCount, backfillTime);
+              console.log(`🔄 Backfilled with last+variation: ${variedCount} bidders`);
+            } else {
+              this.logBidderData(0, backfillTime);
+            }
           }
           
           // Small delay between backfills
