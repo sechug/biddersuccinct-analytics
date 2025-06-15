@@ -1,26 +1,42 @@
 name: 🔁 Scrape & Update Dashboard
 on:
   schedule:
-    - cron: "*/15 * * * *"  # Setiap 15 menit (fixed cron format)
+    - cron: "*/15 * * * *"  # Fixed: tambah * untuk day dan month
   workflow_dispatch:
+
 jobs:
   scrape-and-update:
     runs-on: ubuntu-latest
     steps:
       - name: ⬇️ Checkout Repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+        
       - name: ⚙️ Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '18'
+          cache: 'npm'
+          
       - name: 📦 Install Dependencies
-        run: npm install
+        run: npm ci
+        
+      - name: 🎭 Cache Playwright Browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('**/package-lock.json') }}
+          
       - name: 🔧 Install Playwright Browsers
-        run: npx playwright install --with-deps
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install chromium --with-deps
+        
       - name: 🕷️ Run Scraper
         run: npm run scrape
+        
       - name: 💾 Save latest.json
         run: npm run latest
+        
       - name: 📤 Commit & Push Changes
         run: |
           git config --global user.name 'github-actions[bot]'
