@@ -775,32 +775,36 @@ function filterRecentData(data, hoursLimit = 24) {
         }
 
         function updateMetrics(values) {
-            if (values.length === 0) return;
-            
-            const avg = values.reduce((a, b) => a + b, 0) / values.length;
-            const max = Math.max(...values);
-            const min = Math.min(...values);
-            const volatility = calculateVolatility(values);
-            
+            const cleanValues = values.filter(v => v !== null);
+            if (cleanValues.length === 0) return;
+
+            const avg = cleanValues.reduce((a, b) => a + b, 0) / cleanValues.length;
+            const max = Math.max(...cleanValues);
+            const min = Math.min(...cleanValues);
+            const volatility = calculateVolatility(cleanValues);
+
             // Update display
             document.getElementById('avgBidders').textContent = avg.toFixed(1);
             document.getElementById('peakBidders').textContent = max;
             document.getElementById('lowBidders').textContent = min;
             document.getElementById('volatility').textContent = volatility.toFixed(1);
-            
-            // Update status
+
+            // Update status (pakai clean data juga)
             updateStatus(avg, min, max);
         }
 
+
         function calculateVolatility(values) {
-            if (values.length < 2) return 0;
-            
-            const avg = values.reduce((a, b) => a + b, 0) / values.length;
-            const squaredDiffs = values.map(value => Math.pow(value - avg, 2));
-            const avgSquaredDiff = squaredDiffs.reduce((a, b) => a + b, 0) / values.length;
-            
+            const clean = values.filter(v => v !== null);
+            if (clean.length < 2) return 0;
+
+            const avg = clean.reduce((a, b) => a + b, 0) / clean.length;
+            const squaredDiffs = clean.map(value => Math.pow(value - avg, 2));
+            const avgSquaredDiff = squaredDiffs.reduce((a, b) => a + b, 0) / clean.length;
+
             return Math.sqrt(avgSquaredDiff);
         }
+
 
         function updateStatus(current, min, max) {
             const range = max - min;
