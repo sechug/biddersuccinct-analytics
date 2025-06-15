@@ -498,6 +498,17 @@
         let histogramChart, trendChart;
         let currentInterval = 15; // default 15 minutes
 
+function formatToUTC(dateString) {
+     const date = new Date(dateString);
+     return date.toISOString().slice(0, 19).replace('T', ' ') + ' UTC';
+ }
+
+function shouldShowDateSeparator(currentDate, previousDate) {
+     if (!previousDate) return false;
+     const curr = new Date(currentDate);
+     const prev = new Date(previousDate);
+     return curr.getUTCDate() !== prev.getUTCDate();
+}
         // PASTE INI DI LINE ~500 (setelah let currentInterval = 15;)
 function filterRecentData(data, hoursLimit = 24) {
     const cutoffTime = new Date(Date.now() - (hoursLimit * 60 * 60 * 1000));
@@ -583,13 +594,48 @@ function filterRecentData(data, hoursLimit = 24) {
                         x: {
                             title: {
                                 display: true,
-                                text: 'Time',
+                                text: 'Time (UTC)',
                                 color: '#fff',
                                 font: { weight: 'bold' }
                             },
-                            ticks: { color: '#fff' },
+                            ticks: { 
+                                color: '#fff',
+                                callback: function(value, index, values) {
+                                    const label = this.getLabelForValue(value);
+                
+                                    // Date separator styling
+                                    if (label && label.startsWith('📅')) {
+                                        return label;
+                                    }
+                
+                                    // Time label with UTC indicator
+                                    return label + ' UTC';
+                                },
+                                font: function(context) {
+                                    const label = context.chart.data.labels[context.index];
+                                    // Make date separators bold
+                                    if (label && label.startsWith('📅')) {
+                                        return {
+                                            weight: 'bold',
+                                            size: 10
+                                        };
+                                    }
+                                    return {
+                                        weight: 'normal',
+                                        size: 11
+                                    };
+                                },
+                                color: function(context) {
+                                    const label = context.chart.data.labels[context.index];
+                                    // Different color for date separators
+                                    if (label && label.startsWith('📅')) {
+                                        return '#00ff7f';
+                                    }
+                                    return '#fff';
+                                }
+                            },
                             grid: { color: 'rgba(0, 255, 65, 0.2)' }
-                        }
+                         }
                     }
                 }
             });
@@ -645,68 +691,76 @@ function filterRecentData(data, hoursLimit = 24) {
         }
 
         function aggregateData(intervalMinutes) {
-    if (!rawData || rawData.length === 0) return [];
+            if (!rawData || rawData.length === 0) return [];
     
-    // TAMBAHAN: Filter data untuk 24 jam terakhir saja
-    const recentData = filterRecentData(rawData, 24);
+            const recentData = filterRecentData(rawData, 24);
+            const aggregated = [];
+            const intervalMs = intervalMinutes * 60 * 1000;
     
-    const aggregated = [];
-    const intervalMs = intervalMinutes * 60 * 1000;
+            const sortedData = recentData.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
     
-    // Sort data by timestamp
-    const sortedData = recentData.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            if (sortedData.length === 0) return [];
     
-    if (sortedData.length === 0) return [];
+            const startTime = new Date(sortedData[0].timestamp);
+            const endTime = new Date(sortedData[sortedData.length - 1].timestamp);
     
-    const startTime = new Date(sortedData[0].timestamp);
-    const endTime = new Date(sortedData[sortedData.length - 1].timestamp);
+            let currentTime = new Date(startTime);
     
-    let currentTime = new Date(startTime);
-    
-    while (currentTime <= endTime) {
-        const nextTime = new Date(currentTime.getTime() + intervalMs);
+            while (currentTime <= endTime) {
+                const nextTime = new Date(currentTime.getTime() + intervalMs);
         
-        // Find data points in this interval
-        const pointsInInterval = sortedData.filter(point => {
-            const pointTime = new Date(point.timestamp);
-            return pointTime >= currentTime && pointTime < nextTime;
-        });
+                const pointsInInterval = sortedData.filter(point => {
+                    const pointTime = new Date(point.timestamp);
+                    return pointTime >= currentTime && pointTime < nextTime;
+                });
         
-        if (pointsInInterval.length > 0) {
-            const avgBidders = pointsInInterval.reduce((sum, point) => sum + point.bidders, 0) / pointsInInterval.length;
-            aggregated.push({
-                timestamp: currentTime.toISOString(),
-                bidders: Math.round(avgBidders * 10) / 10,
-                count: pointsInInterval.length
-            });
+                if (pointsInInterval.length > 0) {
+                    const avgBidders = pointsInInterval.reduce((sum, point) => sum + point.bidders, 0) / pointsInInterval.length;
+                    aggregated.push({
+                        timestamp: currentTime.toISOString(),
+                        bidders: Math.round(avgBidders * 10) / 10,
+                        count: pointsInInterval.length
+                    });
+                }
+        
+                currentTime = nextTime;
+            }
+    
+            return aggregated;
         }
-        
-        currentTime = nextTime;
-    }
-    
-    return aggregated;
-}
 
         function updateCharts() {
-            if (!rawData || rawData.length === 0) return;
-            
-            const aggregatedData = aggregateData(currentInterval);
-            
-            // Update histogram
-            const labels = aggregatedData.map(point => {
-                const date = new Date(point.timestamp);
-                return date.toLocaleTimeString('en-US', { 
-                    hour: '2-digit', 
-                    minute: '2-digit',
-                    hour12: false 
-                });
-            });
-            
-            const values = aggregatedData.map(point => point.bidders);
-            
-            histogramChart.data.labels = labels;
-            histogramChart.data.datasets[0].data = values;
-            histogramChart.update('none');
+    if (!rawData || rawData.length === 0) return;
+    
+    const aggregatedData = aggregateData(currentInterval);
+    
+    // Update histogram dengan UTC format dan date separator
+    const labels = [];
+    const values = [];
+    
+    aggregatedData.forEach((point, index) => {
+        const utcTime = formatToUTC(point.timestamp);
+        const shortTime = utcTime.split(' ')[1].slice(0, 5); // HH:MM
+        
+        // Check if we need date separator
+        const previousPoint = index > 0 ? aggregatedData[index - 1] : null;
+        const needsSeparator = shouldShowDateSeparator(point.timestamp, previousPoint?.timestamp);
+        
+        if (needsSeparator) {
+            const dateLabel = new Date(point.timestamp).toISOString().slice(0, 10); // YYYY-MM-DD
+            labels.push(`📅 ${dateLabel}`);
+            labels.push(shortTime);
+            values.push(null); // null value untuk separator
+            values.push(point.bidders);
+        } else {
+            labels.push(shortTime);
+            values.push(point.bidders);
+        }
+    });
+    
+    histogramChart.data.labels = labels;
+    histogramChart.data.datasets[0].data = values;
+    histogramChart.update('none');
             
             // Update trend chart (last 10 points)
             const trendLabels = labels.slice(-10);
