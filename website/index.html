@@ -804,86 +804,120 @@ function filterRecentData(data, hoursLimit = 24) {
 
         function updateStatus(current, min, max) {
             const range = max - min;
+            const statusEl = document.querySelector('.current-status');
+
+            // Fallback untuk range terlalu sempit
+            if (range < 2) {
+                statusEl.className = 'current-status status-quite';
+                statusEl.innerHTML = `
+                    <div style="font-size: 1.2rem; margin-bottom: 5px;">🟡 QUITE CROWDED</div>
+                    <div style="font-size: 0.9rem;">Flat trend, low fluctuation</div>`;
+                return;
+            }
+
             const p25 = min + (range * 0.25);
             const p75 = min + (range * 0.75);
-            
-            const statusEl = document.querySelector('.current-status');
-            
+
             if (current < p25) {
                 statusEl.className = 'current-status status-low';
-                statusEl.innerHTML = '<div style="font-size: 1.2rem; margin-bottom: 5px;">🔵 LOW ACTIVITY</div><div style="font-size: 0.9rem;">Chill vibes, fewer participants</div>';
+                statusEl.innerHTML = `
+                    <div style="font-size: 1.2rem; margin-bottom: 5px;">🔵 LOW ACTIVITY</div>
+                    <div style="font-size: 0.9rem;">Chill vibes, fewer participants</div>`;
             } else if (current > p75) {
                 statusEl.className = 'current-status status-crowded';
-                statusEl.innerHTML = '<div style="font-size: 1.2rem; margin-bottom: 5px;">🔴 SUPER CROWDED</div><div style="font-size: 0.9rem;">High energy, maximum competition!</div>';
+                statusEl.innerHTML = `
+                    <div style="font-size: 1.2rem; margin-bottom: 5px;">🔴 SUPER CROWDED</div>
+                    <div style="font-size: 0.9rem;">High energy, maximum competition!</div>`;
             } else {
                 statusEl.className = 'current-status status-quite';
-                statusEl.innerHTML = '<div style="font-size: 1.2rem; margin-bottom: 5px;">🟡 QUITE CROWDED</div><div style="font-size: 0.9rem;">Moderate vibes, steady activity</div>';
+                statusEl.innerHTML = `
+                    <div style="font-size: 1.2rem; margin-bottom: 5px;">🟡 QUITE CROWDED</div>
+                    <div style="font-size: 0.9rem;">Moderate vibes, steady activity</div>`;
             }
         }
 
+
+        function detectSkewness(values) {
+            const clean = values.filter(v => v !== null).sort((a, b) => a - b);
+            if (clean.length < 3) return 'none';
+
+            const mean = clean.reduce((a, b) => a + b, 0) / clean.length;
+            const mid = Math.floor(clean.length / 2);
+            const median = clean.length % 2 === 0
+                ? (clean[mid - 1] + clean[mid]) / 2
+                : clean[mid];
+
+            const relativeDiff = (mean - median) / (mean || 1); // Hindari divide by 0
+
+            if (Math.abs(relativeDiff) < 0.1) return 'none';
+            return relativeDiff > 0 ? 'positive' : 'negative';
+        }
+
         function updateInsights(values) {
-            if (values.length < 2) return;
-            
+            const cleanValues = values.filter(v => v !== null);
+            if (cleanValues.length < 2) return;
+
             const insights = [];
-            
-            // Calculate trend
-            const recent = values.slice(-3);
-            const earlier = values.slice(-6, -3);
-            
+
+            // Trend recent vs earlier
+            const recent = cleanValues.slice(-3);
+            const earlier = cleanValues.slice(-6, -3);
+
             if (recent.length > 0 && earlier.length > 0) {
                 const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
                 const earlierAvg = earlier.reduce((a, b) => a + b, 0) / earlier.length;
                 const change = ((recentAvg - earlierAvg) / earlierAvg * 100);
-                
+
                 if (Math.abs(change) > 5) {
                     insights.push(`Activity ${change > 0 ? 'increased' : 'decreased'} ${Math.abs(change).toFixed(1)}% recently`);
                 } else {
                     insights.push(`Activity remains stable (${change > 0 ? '+' : ''}${change.toFixed(1)}%)`);
                 }
-            }
-            
-            // Peak time analysis
+             }
+
+            // Time-based insight
             const now = new Date();
-            const currentHour = now.getHours();
-            
-            if (currentHour >= 14 && currentHour <= 16) {
-                insights.push('Currently in peak hours (14:00-16:00)');
-            } else if (currentHour >= 10 && currentHour <= 18) {
-                insights.push('Active hours - moderate activity expected');
+            const hour = now.getUTCHours();
+            if (hour >= 7 && hour <= 9) {
+                insights.push('Currently in peak hours (14:00–16:00 WIB)');
+            } else if (hour >= 3 && hour <= 11) {
+                insights.push('Active hours – moderate activity expected');
             } else {
-                insights.push('Off-peak hours - lower activity expected');
+                insights.push('Off-peak hours – lower activity expected');
             }
-            
+
             // Volatility insight
-            const volatility = calculateVolatility(values);
+            const volatility = calculateVolatility(cleanValues);
             if (volatility > 2) {
-                insights.push('High volatility detected - unpredictable patterns');
+                insights.push('High volatility detected – unpredictable patterns');
             } else if (volatility < 1) {
-                insights.push('Low volatility - stable patterns');
+                insights.push('Low volatility – stable patterns');
             } else {
-                insights.push('Moderate volatility - normal fluctuations');
+                insights.push('Moderate volatility – normal fluctuations');
             }
-            
+
             // Prediction
-            const trend = values.slice(-3);
-            if (trend.length >= 3) {
-                const isIncreasing = trend[2] > trend[1] && trend[1] > trend[0];
-                const isDecreasing = trend[2] < trend[1] && trend[1] < trend[0];
-                
-                if (isIncreasing) {
-                    insights.push('Predicted trend: Continued increase');
-                } else if (isDecreasing) {
-                    insights.push('Predicted trend: Continued decrease');
-                } else {
-                    insights.push('Predicted trend: Stable activity');
-                }
+            if (recent.length >= 3) {
+                const [a, b, c] = recent;
+                if (c > b && b > a) insights.push('Predicted trend: Continued increase');
+                else if (c < b && b < a) insights.push('Predicted trend: Continued decrease');
+                else insights.push('Predicted trend: Stable activity');
             }
-            
-            // Update insights list
+
+            // 🎯 Skewness insight
+            const skew = detectSkewness(cleanValues);
+            if (skew === 'positive') {
+                insights.push('⚠️ Positively skewed – current average may not represent typical behavior');
+            } else if (skew === 'negative') {
+                insights.push('⚠️ Negatively skewed – average may be lower than usual pattern');
+            }
+
+            // Inject insight list
             const insightsList = document.getElementById('insightsList');
-            insightsList.innerHTML = insights.map(insight => `<li>${insight}</li>`).join('');
+            insightsList.innerHTML = insights.map(i => `<li>${i}</li>`).join('');
         }
 
+        
         // Event listeners for time selector
         document.querySelectorAll('.time-btn').forEach(btn => {
             btn.addEventListener('click', function() {
