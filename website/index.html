@@ -498,36 +498,7 @@
         let histogramChart, trendChart;
         let currentInterval = 15; // default 15 minutes
 
-        // UTC time handling functions
-function formatTimeUTC(timestamp) {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString('en-US', { 
-        hour: '2-digit', 
-        minute: '2-digit',
-        hour12: false,
-        timeZone: 'UTC'
-    });
-}
-
-function formatDateUTC(timestamp) {
-    const date = new Date(timestamp);
-    return date.toLocaleDateString('en-US', {
-        weekday: 'short',
-        month: 'short', 
-        day: 'numeric',
-        timeZone: 'UTC'
-    });
-}
-
-function isSameDay(timestamp1, timestamp2) {
-    const date1 = new Date(timestamp1);
-    const date2 = new Date(timestamp2);
-    
-    return date1.getUTCFullYear() === date2.getUTCFullYear() &&
-           date1.getUTCMonth() === date2.getUTCMonth() &&
-           date1.getUTCDate() === date2.getUTCDate();
-}
-      
+        // PASTE INI DI LINE ~500 (setelah let currentInterval = 15;)
 function filterRecentData(data, hoursLimit = 24) {
     const cutoffTime = new Date(Date.now() - (hoursLimit * 60 * 60 * 1000));
     return data.filter(point => new Date(point.timestamp) >= cutoffTime);
@@ -568,20 +539,9 @@ function filterRecentData(data, hoursLimit = 24) {
         }
 
         function updateDataInfo() {
-    document.getElementById('dataPoints').textContent = rawData.length;
-    
-    // Show last update in UTC
-    const now = new Date();
-    const utcTime = now.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit', 
-        second: '2-digit',
-        hour12: false,
-        timeZone: 'UTC'
-    });
-    
-    document.getElementById('lastUpdate').textContent = `${utcTime} UTC`;
-}
+            document.getElementById('dataPoints').textContent = rawData.length;
+            document.getElementById('lastUpdate').textContent = 'Just now';
+        }
 
         function initCharts() {
             // Histogram Chart with neon green theme
@@ -616,42 +576,22 @@ function filterRecentData(data, hoursLimit = 24) {
                                 text: 'Bidders Count',
                                 color: '#fff',
                                 font: { weight: 'bold' }
-                             },
+                            },
                             ticks: { color: '#fff' },
                             grid: { color: 'rgba(0, 255, 65, 0.2)' }
                         },
                         x: {
                             title: {
                                 display: true,
-                                text: 'Time (UTC)',
+                                text: 'Time',
                                 color: '#fff',
                                 font: { weight: 'bold' }
                             },
-                            ticks: { 
-                            color: '#fff',
-                            callback: function(value, index, values) {
-                        const label = this.getLabelForValue(value);
-                          // Style separator labels differently
-                        if (label && label.includes('───')) {
-                            return label;
+                            ticks: { color: '#fff' },
+                            grid: { color: 'rgba(0, 255, 65, 0.2)' }
                         }
-                        return label;
                     }
-                },
-                grid: { color: 'rgba(0, 255, 65, 0.2)' }
-            }
-        },
-        elements: {
-            bar: {
-                // Don't show bars for separator entries
-                backgroundColor: function(context) {
-                    if (context.parsed.y === null) {
-                        return 'transparent';
-                    }
-                    return 'rgba(0, 255, 65, 0.6)';
                 }
-            }
-        }
             });
 
             // Trend Chart (Line) with neon green theme
@@ -748,53 +688,37 @@ function filterRecentData(data, hoursLimit = 24) {
 }
 
         function updateCharts() {
-    if (!rawData || rawData.length === 0) return;
-    
-    const aggregatedData = aggregateData(currentInterval);
-    
-    // Create labels with day separators
-    const labels = [];
-    const values = [];
-    let lastDate = null;
-    
-    aggregatedData.forEach((point, index) => {
-        const currentDate = formatDateUTC(point.timestamp);
-        
-        // Add day separator if date changes
-        if (lastDate && lastDate !== currentDate) {
-            labels.push(`─── ${currentDate} ───`);
-            values.push(null); // null value for separator
-        } else if (index === 0) {
-            // Add date label at the beginning
-            labels.push(`─── ${currentDate} ───`);
-            values.push(null);
+            if (!rawData || rawData.length === 0) return;
+            
+            const aggregatedData = aggregateData(currentInterval);
+            
+            // Update histogram
+            const labels = aggregatedData.map(point => {
+                const date = new Date(point.timestamp);
+                return date.toLocaleTimeString('en-US', { 
+                    hour: '2-digit', 
+                    minute: '2-digit',
+                    hour12: false 
+                });
+            });
+            
+            const values = aggregatedData.map(point => point.bidders);
+            
+            histogramChart.data.labels = labels;
+            histogramChart.data.datasets[0].data = values;
+            histogramChart.update('none');
+            
+            // Update trend chart (last 10 points)
+            const trendLabels = labels.slice(-10);
+            const trendValues = values.slice(-10);
+            
+            trendChart.data.labels = trendLabels;
+            trendChart.data.datasets[0].data = trendValues;
+            trendChart.update('none');
+            
+            updateMetrics(values);
+            updateInsights(values);
         }
-        
-        // Add time label and value
-        labels.push(formatTimeUTC(point.timestamp));
-        values.push(point.bidders);
-        
-        lastDate = currentDate;
-    });
-    
-    histogramChart.data.labels = labels;
-    histogramChart.data.datasets[0].data = values;
-    histogramChart.update('none');
-    
-    // Update trend chart (last 10 actual data points, skip separators)
-    const actualData = aggregatedData.slice(-10);
-    const trendLabels = actualData.map(point => formatTimeUTC(point.timestamp));
-    const trendValues = actualData.map(point => point.bidders);
-    
-    trendChart.data.labels = trendLabels;
-    trendChart.data.datasets[0].data = trendValues;
-    trendChart.update('none');
-    
-    // Use only actual values for metrics (filter out nulls)
-    const actualValues = values.filter(v => v !== null);
-    updateMetrics(actualValues);
-    updateInsights(actualValues);
-}
 
         function updateMetrics(values) {
             if (values.length === 0) return;
