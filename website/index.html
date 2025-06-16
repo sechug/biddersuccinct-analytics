@@ -857,29 +857,16 @@ function filterRecentData(data, hoursLimit = 24) {
             return relativeDiff > 0 ? 'positive' : 'negative';
         }
 
-        function updateInsights(values) {
+       function updateInsights(values) {
             const cleanValues = values.filter(v => v !== null);
             if (cleanValues.length < 2) return;
 
             const insights = [];
 
-            // Trend recent vs earlier
-            const recent = cleanValues.slice(-3);
-            const earlier = cleanValues.slice(-6, -3);
+            // REMOVED: Trend recent vs earlier calculation
+            // (This was causing the error when earlierAvg was 0 or undefined)
 
-            if (recent.length > 0 && earlier.length > 0) {
-                const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
-                const earlierAvg = earlier.reduce((a, b) => a + b, 0) / earlier.length;
-                const change = ((recentAvg - earlierAvg) / earlierAvg * 100);
-
-                if (Math.abs(change) > 5) {
-                    insights.push(`Activity ${change > 0 ? 'increased' : 'decreased'} ${Math.abs(change).toFixed(1)}% recently`);
-                } else {
-                    insights.push(`Activity remains stable (${change > 0 ? '+' : ''}${change.toFixed(1)}%)`);
-                }
-             }
-
-           // Data quality insight (berdasarkan scraping 15 menit)
+            // Data quality insight (berdasarkan scraping 15 menit)
             const dataFreshness = 15; // menit
             const lastDataPoint = new Date(rawData[rawData.length - 1]?.timestamp);
             const timeSinceLastData = (Date.now() - lastDataPoint.getTime()) / (1000 * 60);
@@ -926,7 +913,8 @@ function filterRecentData(data, hoursLimit = 24) {
                 insights.push('Moderate volatility – normal fluctuations');
             }
 
-            // Prediction
+            // Prediction (simplified version without the problematic trend calculation)
+            const recent = cleanValues.slice(-3);
             if (recent.length >= 3) {
                 const [a, b, c] = recent;
                 if (c > b && b > a) insights.push('Predicted trend: Continued increase');
@@ -934,7 +922,7 @@ function filterRecentData(data, hoursLimit = 24) {
                 else insights.push('Predicted trend: Stable activity');
             }
 
-            // 🎯 Skewness insight
+            // Skewness insight
             const skew = detectSkewness(cleanValues);
             if (skew === 'positive') {
                 insights.push('⚠️ Positively skewed – current average may not represent typical behavior');
@@ -946,7 +934,6 @@ function filterRecentData(data, hoursLimit = 24) {
             const insightsList = document.getElementById('insightsList');
             insightsList.innerHTML = insights.map(i => `<li>${i}</li>`).join('');
         }
-
         
         // Event listeners for time selector
         document.querySelectorAll('.time-btn').forEach(btn => {
