@@ -879,15 +879,41 @@ function filterRecentData(data, hoursLimit = 24) {
                 }
              }
 
-            // Time-based insight
-            const now = new Date();
-            const hour = now.getUTCHours();
-            if (hour >= 7 && hour <= 9) {
-                insights.push('Currently in peak hours (14:00–16:00 WIB)');
-            } else if (hour >= 3 && hour <= 11) {
-                insights.push('Active hours – moderate activity expected');
+           // Data quality insight (berdasarkan scraping 15 menit)
+            const dataFreshness = 15; // menit
+            const lastDataPoint = new Date(rawData[rawData.length - 1]?.timestamp);
+            const timeSinceLastData = (Date.now() - lastDataPoint.getTime()) / (1000 * 60);
+
+            if (timeSinceLastData <= 20) {
+                insights.push('🔄 Data is fresh (updated < 20 min ago)');
+            } else if (timeSinceLastData <= 60) {
+                insights.push('⏰ Data is recent (updated < 1 hour ago)');
             } else {
-                insights.push('Off-peak hours – lower activity expected');
+                insights.push('⚠️ Data may be stale (updated > 1 hour ago)');
+            }
+
+            // Activity level comparison
+            const currentValue = cleanValues[cleanValues.length - 1];
+            const avgValue = cleanValues.reduce((a, b) => a + b, 0) / cleanValues.length;
+            const percentageFromAvg = ((currentValue - avgValue) / avgValue * 100);
+
+            if (percentageFromAvg > 25) {
+                insights.push('🔥 Current activity significantly above average (+' + percentageFromAvg.toFixed(1) + '%)');
+            } else if (percentageFromAvg < -25) {
+                insights.push('📉 Current activity below typical levels (' + percentageFromAvg.toFixed(1) + '%)');
+            } else if (Math.abs(percentageFromAvg) <= 10) {
+                insights.push('📊 Current activity matches typical patterns (' + (percentageFromAvg > 0 ? '+' : '') + percentageFromAvg.toFixed(1) + '%)');
+            } else {
+                insights.push('📈 Current activity slightly ' + (percentageFromAvg > 0 ? 'above' : 'below') + ' average (' + (percentageFromAvg > 0 ? '+' : '') + percentageFromAvg.toFixed(1) + '%)');
+            }
+
+            // Peak detection dari data real
+            const maxInPeriod = Math.max(...cleanValues);
+            const minInPeriod = Math.min(...cleanValues);
+            if (currentValue === maxInPeriod && cleanValues.length > 3) {
+                insights.push('🎯 Currently at peak activity for this timeframe');
+            } else if (currentValue === minInPeriod && cleanValues.length > 3) {
+                insights.push('💤 Currently at lowest activity for this timeframe');
             }
 
             // Volatility insight
