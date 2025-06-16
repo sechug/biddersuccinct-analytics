@@ -862,23 +862,7 @@ function filterRecentData(data, hoursLimit = 24) {
             if (cleanValues.length < 2) return;
 
             const insights = [];
-
-            // // Trend recent vs earlier
-// const recent = cleanValues.slice(-3);
-// const earlier = cleanValues.slice(-6, -3);
-// 
-// if (recent.length > 0 && earlier.length > 0) {
-//     const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
-//     const earlierAvg = earlier.reduce((a, b) => a + b, 0) / earlier.length;
-//     const change = ((recentAvg - earlierAvg) / earlierAvg * 100);
-// 
-//     if (Math.abs(change) > 5) {
-//         insights.push(`Activity ${change > 0 ? 'increased' : 'decreased'} ${Math.abs(change).toFixed(1)}% recently`);
-//     } else {
-//         insights.push(`Activity remains stable (${change > 0 ? '+' : ''}${change.toFixed(1)}%)`);
-//     }
-// }
-
+            
            // Data quality insight (berdasarkan scraping 15 menit)
             const dataFreshness = 15; // menit
             const lastDataPoint = new Date(rawData[rawData.length - 1]?.timestamp);
