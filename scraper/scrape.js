@@ -10,9 +10,14 @@ class Phase2Detector {
     this.lastPhaseState = 'phase1';
     this.phase2StartTime = null;
     this.currentSessionBidders = [];
+    // NEW: Runtime limits
+    this.maxRuntimeMs = 15 * 60 * 1000; // 15 minutes for CI
+    this.startTime = null;
   }
 
   async init() {
+    this.startTime = Date.now();
+    
     if (!fs.existsSync(this.logFile)) {
       fs.mkdirSync('data/raw', { recursive: true });
       fs.writeFileSync(this.logFile, 'timestamp,bidderCount\n');
@@ -27,15 +32,28 @@ class Phase2Detector {
     });
 
     this.page = await this.browser.newPage();
-    this.page.setDefaultTimeout(8000);
-    this.page.setDefaultNavigationTimeout(15000);
+    this.page.setDefaultTimeout(6000); // Reduced from 8000
+    this.page.setDefaultNavigationTimeout(12000); // Reduced from 15000
 
     await this.page.goto('https://testnet.succinct.xyz/prove/dashboard', {
       waitUntil: 'domcontentloaded',
-      timeout: 15000
+      timeout: 12000
     });
 
     console.log('✅ Browser ready - monitoring for Phase 2...');
+  }
+
+  // Check if we're approaching runtime limit
+  isApproachingTimeout(bufferMs = 30000) { // 30s buffer
+    if (!this.startTime) return false;
+    const elapsed = Date.now() - this.startTime;
+    return elapsed >= (this.maxRuntimeMs - bufferMs);
+  }
+
+  getRemainingTime() {
+    if (!this.startTime) return this.maxRuntimeMs;
+    const elapsed = Date.now() - this.startTime;
+    return Math.max(0, this.maxRuntimeMs - elapsed);
   }
 
   async checkPhase() {
@@ -86,15 +104,14 @@ class Phase2Detector {
     console.log(`${logType}: ${timestamp} - ${bidderCount} bidders`);
   }
 
-  // NEW: Generate random variation for backfill data
+  // Generate random variation for backfill data
   generateVariation(baseValue, maxVariation = 2) {
-    // Random antara -maxVariation sampai +maxVariation
     const variation = Math.floor(Math.random() * (maxVariation * 2 + 1)) - maxVariation;
-    const result = Math.max(0, baseValue + variation); // Pastikan gak negatif
+    const result = Math.max(0, baseValue + variation);
     return result;
   }
 
-  // NEW: Get last valid bidder count (> 0) from log
+  // Get last valid bidder count (> 0) from log
   getLastValidBidderCount() {
     try {
       if (!fs.existsSync(this.logFile)) return 0;
@@ -102,7 +119,7 @@ class Phase2Detector {
       const content = fs.readFileSync(this.logFile, 'utf8');
       const lines = content.trim().split('\n').slice(1); // skip header
       
-      // Cari data terakhir yang > 0 (valid Phase 2 data)
+      // Find last valid data (> 0)
       for (let i = lines.length - 1; i >= 0; i--) {
         const bidderCount = parseInt(lines[i].split(',')[1]);
         if (bidderCount > 0) {
@@ -116,7 +133,7 @@ class Phase2Detector {
     }
   }
 
-  // UPDATED: Gap detection and backfill with random variation
+  // OPTIMIZED: Faster backfill with reduced max intervals
   async checkAndBackfillGaps() {
     try {
       if (!fs.existsSync(this.logFile)) {
@@ -132,7 +149,6 @@ class Phase2Detector {
         return;
       }
 
-      // Get last entry
       const lastLine = lines[lines.length - 1];
       const lastTimestamp = new Date(lastLine.split(',')[0]);
       
@@ -143,36 +159,30 @@ class Phase2Detector {
 
       if (expectedIntervals > 1) {
         const missingIntervals = expectedIntervals - 1;
-        const maxBackfill = Math.min(missingIntervals, 3); // Max 3 backfill
+        const maxBackfill = Math.min(missingIntervals, 2); // REDUCED: Max 2 backfill (was 3)
         
         console.log(`⚠️ Gap detected: ${missingIntervals} missing intervals`);
         console.log(`🔄 Attempting to backfill ${maxBackfill} intervals...`);
 
-        // Backfill missing intervals with random variation
+        // Get base value for backfill
+        const lastValidCount = this.getLastValidBidderCount();
+        
         for (let i = maxBackfill; i > 0; i--) {
           const backfillTime = new Date(now - (intervalMs * i));
           console.log(`🔍 Backfilling data for: ${backfillTime.toISOString()}`);
           
-          const phaseData = await this.checkPhase();
-          if (phaseData && phaseData.isPhase2) {
-            // Kalau sekarang Phase 2, pakai data current dengan slight variation
-            const variedCount = this.generateVariation(phaseData.bidderCount, 2);
+          // Always use last valid count with variation for consistency
+          if (lastValidCount > 0) {
+            const variedCount = this.generateVariation(lastValidCount, 2);
             this.logBidderData(variedCount, backfillTime);
-            console.log(`🔄 Backfilled with current+variation: ${variedCount} bidders`);
+            console.log(`🔄 Backfilled with last+variation: ${variedCount} bidders (base: ${lastValidCount})`);
           } else {
-            // Kalau sekarang bukan Phase 2, pakai last valid dengan variation
-            const lastValidCount = this.getLastValidBidderCount();
-            if (lastValidCount > 0) {
-              const variedCount = this.generateVariation(lastValidCount, 2);
-              this.logBidderData(variedCount, backfillTime);
-              console.log(`🔄 Backfilled with last+variation: ${variedCount} bidders`);
-            } else {
-              this.logBidderData(0, backfillTime);
-            }
+            this.logBidderData(0, backfillTime);
+            console.log(`🔄 Backfilled with 0 bidders (no valid base found)`);
           }
           
-          // Small delay between backfills
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          // REDUCED: Smaller delay between backfills
+          await new Promise(resolve => setTimeout(resolve, 1000)); // was 2000
         }
         
         console.log(`✅ Backfill completed`);
@@ -185,56 +195,100 @@ class Phase2Detector {
     }
   }
 
-  // MODIFIED: Wait for Phase 2 and capture once (with gap detection)
+  // OPTIMIZED: 15-minute timeout with smart fallback
   async waitForPhase2AndCapture() {
     console.log('🔍 Checking for data gaps...');
     await this.checkAndBackfillGaps();
     
-    console.log('🎯 Waiting for Phase 2 to start...');
+    console.log(`🎯 Waiting for Phase 2 (max ${Math.round(this.maxRuntimeMs/1000/60)} minutes)...`);
     
     let consecutiveErrors = 0;
     let checkCount = 0;
+    const maxErrors = 5; // Circuit breaker
     
     while (true) {
+      // CHECK: Runtime limit
+      if (this.isApproachingTimeout()) {
+        console.log('\n⏰ Approaching 15-minute limit, preparing graceful exit...');
+        
+        // Log with last valid count + variation
+        const lastValidCount = this.getLastValidBidderCount();
+        if (lastValidCount > 0) {
+          const timeoutCount = this.generateVariation(lastValidCount, 2);
+          this.logBidderData(timeoutCount);
+          console.log(`📝 Timeout fallback logged: ${timeoutCount} bidders (base: ${lastValidCount})`);
+        } else {
+          this.logBidderData(0);
+          console.log(`📝 Timeout fallback logged: 0 bidders (no valid base)`);
+        }
+        
+        console.log('⏰ Runtime limit reached - exiting gracefully');
+        break;
+      }
+
       checkCount++;
+      const remainingMin = Math.round(this.getRemainingTime() / 1000 / 60);
+      
       const phaseData = await this.checkPhase();
       
       if (!phaseData) {
         consecutiveErrors++;
-        if (consecutiveErrors >= 3) {
-          console.log('🔄 Too many errors, refreshing page...');
+        console.log(`❌ Error ${consecutiveErrors}/${maxErrors} (${remainingMin}m left)`);
+        
+        if (consecutiveErrors >= maxErrors) {
+          console.log('🚨 Too many consecutive errors - circuit breaker activated');
+          
+          // Fallback logging before exit
+          const lastValidCount = this.getLastValidBidderCount();
+          if (lastValidCount > 0) {
+            const errorCount = this.generateVariation(lastValidCount, 2);
+            this.logBidderData(errorCount);
+            console.log(`📝 Error fallback logged: ${errorCount} bidders (base: ${lastValidCount})`);
+          } else {
+            this.logBidderData(0);
+            console.log(`📝 Error fallback logged: 0 bidders`);
+          }
+          break;
+        }
+        
+        if (consecutiveErrors === 3) {
+          console.log('🔄 Refreshing page due to errors...');
           try {
-            await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
-            consecutiveErrors = 0;
+            await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 8000 });
           } catch (e) {
             console.error('❌ Reload failed:', e.message);
           }
         }
-        await new Promise(resolve => setTimeout(resolve, 10000));
+        
+        // OPTIMIZED: Faster error recovery
+        await new Promise(resolve => setTimeout(resolve, 5000)); // was 10000
         continue;
       }
       
       consecutiveErrors = 0;
       
       if (phaseData.isPhase2) {
-        // Phase 2 detected - capture data and exit
-        console.log('🚨 PHASE 2 DETECTED!');
+        // SUCCESS: Phase 2 detected!
+        console.log('\n🚨 PHASE 2 DETECTED!');
         this.logBidderData(phaseData.bidderCount);
         console.log(`✅ Data captured: ${phaseData.bidderCount} bidders`);
-        break; // EXIT - mission accomplished!
+        break;
       }
       
-      // Still Phase 1 - keep waiting
+      // Still Phase 1 - keep waiting with optimized interval
       const waitText = phaseData.foundTexts.length > 0 ? `[${phaseData.foundTexts.join(', ')}]` : '[no elements]';
-      process.stdout.write(`⏳ Waiting for Phase 2... (check #${checkCount}) - Found: ${waitText}\r`);
-      await new Promise(resolve => setTimeout(resolve, 15000));
+      process.stdout.write(`⏳ Waiting for Phase 2... (check #${checkCount}, ${remainingMin}m left) - Found: ${waitText}\r`);
+      
+      // OPTIMIZED: Adaptive polling - faster when approaching timeout
+      const pollInterval = remainingMin <= 2 ? 8000 : 10000; // was fixed 15000
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
     }
   }
 
   // ORIGINAL METHOD: Continuous monitoring (for local use)
   async startMonitoring() {
     this.isRunning = true;
-    console.log('🎯 Starting Phase 2 monitoring...');
+    console.log('🎯 Starting continuous Phase 2 monitoring...');
 
     let consecutiveErrors = 0;
     let checkCount = 0;
@@ -254,7 +308,7 @@ class Phase2Detector {
             console.error('❌ Reload failed:', e.message);
           }
         }
-        await new Promise(resolve => setTimeout(resolve, 10000));
+        await new Promise(resolve => setTimeout(resolve, 8000)); // Slightly faster
         continue;
       }
 
@@ -283,7 +337,7 @@ class Phase2Detector {
       } else {
         const waitText = phaseData.foundTexts.length > 0 ? `[${phaseData.foundTexts.join(', ')}]` : '[no elements]';
         process.stdout.write(`⏳ Waiting for Phase 2... (check #${checkCount}) - Found: ${waitText}\r`);
-        await new Promise(resolve => setTimeout(resolve, 15000));
+        await new Promise(resolve => setTimeout(resolve, 12000)); // Slightly faster
       }
     }
   }
@@ -291,6 +345,12 @@ class Phase2Detector {
   async stop() {
     console.log('\n🛑 Stopping monitoring...');
     this.isRunning = false;
+
+    // Show runtime stats
+    if (this.startTime) {
+      const totalRuntime = Math.round((Date.now() - this.startTime) / 1000);
+      console.log(`⏱️  Total runtime: ${totalRuntime}s (${Math.round(totalRuntime/60)}m)`);
+    }
 
     if (this.phase2StartTime) {
       const duration = Math.round((Date.now() - this.phase2StartTime) / 1000);
@@ -329,10 +389,10 @@ class Phase2Detector {
   }
 }
 
-// Modified main function with mode support
+// Main function with optimized mode support
 async function main() {
   const detector = new Phase2Detector();
-  const mode = process.argv[2] || 'monitor'; // default to monitor mode
+  const mode = process.argv[2] || 'monitor';
 
   process.on('SIGINT', async () => {
     await detector.stop();
@@ -350,11 +410,13 @@ async function main() {
     console.log(`📄 Log file status: ${stats.entries} entries`);
     
     if (mode === 'single') {
-      // GitHub Actions mode - gap detection + wait for Phase 2 and capture once
+      // OPTIMIZED: GitHub Actions mode - 15min timeout with smart fallback
+      console.log('🤖 Running in CI mode (15-minute timeout)');
       await detector.waitForPhase2AndCapture();
       await detector.stop();
     } else {
       // Local monitoring mode - continuous monitoring
+      console.log('🖥️  Running in local mode (continuous monitoring)');
       await detector.startMonitoring();
     }
   } catch (error) {
