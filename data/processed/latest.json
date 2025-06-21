@@ -2198,5 +2198,13 @@
   {
     "timestamp": "2025-06-21T19:19:16Z",
     "bidders": 14
+  },
+  {
+    "timestamp": "2025-06-21T19:37:40Z",
+    "bidders": 12
+  },
+  {
+    "timestamp": "2025-06-21T19:53:12Z",
+    "bidders": 9
   }
 ]
