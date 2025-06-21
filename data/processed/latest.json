@@ -1998,5 +1998,13 @@
   {
     "timestamp": "2025-06-21T03:27:40Z",
     "bidders": 7
+  },
+  {
+    "timestamp": "2025-06-21T03:43:23Z",
+    "bidders": 8
+  },
+  {
+    "timestamp": "2025-06-21T03:58:24Z",
+    "bidders": 1
   }
 ]
