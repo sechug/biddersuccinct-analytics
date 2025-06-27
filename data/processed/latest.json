@@ -3670,5 +3670,13 @@
   {
     "timestamp": "2025-06-27T04:16:21Z",
     "bidders": 6
+  },
+  {
+    "timestamp": "2025-06-27T04:37:06Z",
+    "bidders": 4
+  },
+  {
+    "timestamp": "2025-06-27T04:52:08Z",
+    "bidders": 10
   }
 ]
