@@ -4774,5 +4774,13 @@
   {
     "timestamp": "2025-07-01T05:03:07Z",
     "bidders": 8
+  },
+  {
+    "timestamp": "2025-07-01T05:25:45Z",
+    "bidders": 6
+  },
+  {
+    "timestamp": "2025-07-01T05:40:46Z",
+    "bidders": 1
   }
 ]
