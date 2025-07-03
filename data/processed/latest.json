@@ -5410,5 +5410,13 @@
   {
     "timestamp": "2025-07-03T12:50:28Z",
     "bidders": 0
+  },
+  {
+    "timestamp": "2025-07-03T13:20:26Z",
+    "bidders": 13
+  },
+  {
+    "timestamp": "2025-07-03T13:35:27Z",
+    "bidders": 0
   }
 ]
