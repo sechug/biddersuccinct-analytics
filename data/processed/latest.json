@@ -6706,5 +6706,13 @@
   {
     "timestamp": "2025-07-08T09:00:27Z",
     "bidders": 7
+  },
+  {
+    "timestamp": "2025-07-08T09:17:31Z",
+    "bidders": 6
+  },
+  {
+    "timestamp": "2025-07-08T09:33:22Z",
+    "bidders": 12
   }
 ]
