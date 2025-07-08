@@ -6654,5 +6654,13 @@
   {
     "timestamp": "2025-07-08T04:52:54Z",
     "bidders": 13
+  },
+  {
+    "timestamp": "2025-07-08T05:11:02Z",
+    "bidders": 12
+  },
+  {
+    "timestamp": "2025-07-08T05:26:03Z",
+    "bidders": 1
   }
 ]
